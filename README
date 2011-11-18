@@ -1,1 +1,2 @@
-various electronic designs
+various electronic designs:
+. dspic33f_board, a DSPIC33F based board, with CAN transceiver and serial over USB support via FTDI
