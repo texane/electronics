@@ -1,0 +1,87 @@
+-- passifs, semiconducteur et cristaux
+
+. capa 47pf x20 [x]
+http://fr.farnell.com/avx/sr151a470jar/condensateur-47pf-100v/dp/1100371
+
+. capa 47nf x20 [x]
+http://fr.farnell.com/panasonic/ecqv1473jm/condensateur-47nf-100v-5/dp/1669196
+
+. capa 100nf x20 [x]
+http://fr.farnell.com/multicomp/mcrr50104x7rk0100/condensateur-100nf-100v/dp/1216434
+
+. capa polarise 33uf x20 [x]
+http://fr.farnell.com/panasonic/eca2aam330x/condensateur-33uf-100v/dp/8767645
+
+. resistance 10k x50 [x]
+http://fr.farnell.com/multicomp/mcf-0-25w-10k/resistance-0-25w-5-10k/dp/9339060
+
+. resistance 27 x50 [x]
+http://fr.farnell.com/multicomp/mcf-0-25w-27r/resistance-0-25w-5-27r/dp/9339345
+
+. resistance 300 x50 [x]
+http://fr.farnell.com/multicomp/mf25-300r/resistance-0-25w-1-300r/dp/9341684
+
+. resistance 120 x50 [x]
+http://fr.farnell.com/multicomp/mcf-0-25w-120r/resistance-0-25w-5-120r/dp/9339116
+
+. resistance 4k7 x50 [x]
+http://fr.farnell.com/multicomp/mcf-0-25w-4k7/resistance-0-25w-5-4k7/dp/9339540
+
+. resistance 1k5 x50 [x]
+http://fr.farnell.com/multicomp/mcf-0-25w-1k5/resistance-0-25w-5-1k5/dp/9339183
+
+. 10mhz xtal x5 [x]
+http://fr.farnell.com/iqd-frequency-products/lf-a143k/quartz-10mhz/dp/9713697
+
+. diode 1N4148 x20 [x]
+http://fr.farnell.com/vishay-semiconductor/1n4148/diode-faible-signal-100v-do-204/dp/1612346
+
+. leds 5v 3mm vert x5 [x]
+http://fr.farnell.com/avago-technologies/hlmp-1640/led-3mm-vert/dp/1003391
+
+. leds 3v 3mm bleu x5 [x]
+http://fr.farnell.com/avago-technologies/hlmp-kb45-a0000/led-3mm-bleu/dp/1003308
+
+
+-- circuits integres
+. MCP2551I/P x4 [x]
+http://fr.farnell.com/microchip/mcp2551-i-p/transceiver-can-dip8-2551/dp/1292240
+
+. DSPIC33FJ128MC802-SP x4 [x]
+http://fr.farnell.com/microchip/dspic33fj128gp802-e-sp/dsc-16bit-128k-flash-gp-28sdip/dp/1676257
+
+. ft232 x4 [x]
+http://fr.farnell.com/ftdi/ft232rl/usb-vers-uart-cms-ssop28-232/dp/1146032
+
+. lm3940it-3.3 x4 [x]
+http://fr.farnell.com/national-semiconductor/lm3940it-3-3/convertisseur-dc-dc/dp/9494553
+
+-- connectors
+. fiche male droite secable x5 [x]
+http://fr.farnell.com/molex/22-28-4360/fiche-male-droite/dp/1654535
+
+. connecteur rj11 x4 [ a commander chez sparkfun, ou demander a pierrick ]
+http://fr.farnell.com/molex/43202-6101/cat3-cat4-rj11-modular-jack-6pos/dp/1387089
+http://www.sparkfun.com/products/132
+
+. connecteur usb femelle x4 [x]
+http://fr.farnell.com/lumberg/2411-02/embase-usb-ci-type-b/dp/1177885
+http://www.sparkfun.com/search/results?term=PRT-00139+&what=products
+
+-- jumpers, pin headers
+
+. cavalier noir x20 [x]
+http://fr.farnell.com/fci/68786-202lf/cavalier-2-voies-dore-noir/dp/1740370
+
+. ecrous m4 x1 [ a commander plus tard ]
+http://fr.farnell.com/duratool/m4-hfa2-s100/full-nut-stainless-steel-a2-m4/dp/1420790
+
+. ecrous m3 x1 [ a commander plus tard ]
+http://fr.farnell.com/duratool/m3-hfa2-s100/full-nut-stainless-steel-a2-m3/dp/1420788
+
+. push button x5 [x]
+http://fr.farnell.com/te-connectivity/fsm101/bouton-poussoir/dp/1813631
+http://www.sparkfun.com/products/97
+
+. boutton glissiere, spst switch x4 []
+http://fr.farnell.com/apem/25436nah/commutateur-slide-spst/dp/1607954
