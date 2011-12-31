@@ -392,9 +392,6 @@ static inline void do_test(void)
 
 int main(int ac, char** av)
 {
-  /* disable all interrupts */
-  _IPL |= 7;
-
   osc_setup();
   do_test();
   while (1) ;
