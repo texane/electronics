@@ -3,9 +3,10 @@
 
 /* configuration bits */
 
-_FOSCSEL(FNOSC_FRCPLL)
-_FOSC(FCKSM_CSECMD & IOL1WAY_OFF & OSCIOFNC_ON & POSCMD_NONE)
+_FOSCSEL(FNOSC_FRCPLL);
+_FOSC(FCKSM_CSECMD & IOL1WAY_OFF & OSCIOFNC_ON & POSCMD_NONE);
 _FWDT(FWDTEN_OFF);
+_FBS(BWRP_WRPROTECT_OFF);
 
 
 /* int types */
@@ -68,7 +69,7 @@ static inline uint8_t get_boot_id(void)
 #if defined(CONFIG_BOOT_ID)
   return CONFIG_BOOT_ID;
 #else
-  /* todo */
+  /* todo: read from dip switch */
   return 0;
 #endif
 }
@@ -154,6 +155,7 @@ static inline void write_uint32(uint8_t* s, uint32_t x)
 
 static void ecan_setup(uint8_t id)
 {
+  /* todo: use id as a boot command filter */
 }
 
 static void ecan_write(uint8_t* s)
@@ -235,51 +237,9 @@ static void uart_read(uint8_t* s)
 
 
 /* flash programming routines */
-/* dspic33f_bootloader/msstate/bootloader/24h_24f_target/mem.c */
-
-static inline void write_mem(void)
-{
-  /* write one program memory row */
-  asm("mov #0x4001, W0");
-  asm("mov W0, NVMCON");
-
-  /* refer to erase_page */
-  asm("disi #5");
-  asm("mov #0x55, W0");
-  asm("mov W0, NVMKEY");
-  asm("mov #0xaa, W1");
-  asm("mov W1, NVMKEY");
-  asm("bset NVMCOM, #15");
-  asm("nop");
-  asm("nop");
-}
-
-static inline void load_addr(uint16_t nvmadru, uint16_t nvmadr)
-{
-  asm("mov W0, TBLPAG");
-  asm("mov W1, W1");
-}
-
-static inline void load_latches
-(uint16_t addrhi, uint16_t addrlo, uint16_t wordhi, uint16_t wordlo)
-{
-  asm("mov W0, TBLPAG");
-  asm("tblwtl W3, [W1]");
-  asm("tblwth W2, [W1]");
-}
-
-static inline uint32_t read_latch(uint16_t addrhi, uint16_t addrlo)
-{
-  asm("mov W0, TBLPAG");
-  asm("tblrdl [W1], W0");
-  asm("tblrdh [W1], W1");
-
-}
 
 static inline void erase_page(uint16_t addrhi, uint16_t addrlo)
 {
-  /* dspic ref man, example 5-1 */
-
 #if 0
   asm("push TBLPAG");
 #endif
@@ -287,6 +247,8 @@ static inline void erase_page(uint16_t addrhi, uint16_t addrlo)
   asm("mov #0x4042, W2");
   asm("mov W2, NVMCOM");
 
+  /* the 24 bit target addr is (tblpag<7:0> << 16) + Wi */
+  /* i specified in the table instruction */
   asm("mov W0, TBLPAG");
   asm("tblwtl W1, [W1]");
 
@@ -302,7 +264,7 @@ static inline void erase_page(uint16_t addrhi, uint16_t addrlo)
   /* start erase sequence */
   asm("bset NVMCOM, #15");
 
-  /* from example */
+  /* see ref manual 5-1 example */
 #if 1
   asm("nop");
   asm("nop");
@@ -314,6 +276,36 @@ static inline void erase_page(uint16_t addrhi, uint16_t addrlo)
 #if 0
   asm("pop TBLPAG");
 #endif
+}
+
+static inline void write_mem(void)
+{
+  /* write one program memory row */
+  asm("mov #0x4001, W0");
+  asm("mov W0, NVMCON");
+
+  /* see erase_page */
+  asm("disi #5");
+  asm("mov #0x55, W0");
+  asm("mov W0, NVMKEY");
+  asm("mov #0xaa, W1");
+  asm("mov W1, NVMKEY");
+  asm("bset NVMCOM, #15");
+  asm("nop");
+  asm("nop");
+}
+
+static inline void load_latches
+(uint16_t addrhi, uint16_t addrlo, uint16_t wordhi, uint16_t wordlo)
+{
+  /* w0 contains addrhi */
+  /* w1 contains addrlo */
+  /* w2 contains wordhi */
+  /* w3 contains wordlo */
+
+  asm("mov W0, TBLPAG");
+  asm("tblwtl W3, [W1]");
+  asm("tblwth W2, [W1]");
 }
 
 
@@ -358,10 +350,10 @@ static void read_process_cmd(void)
       /* i incremented by inner loop */
       for (i = 0; i < PAGE_BYTE_COUNT; )
       {
-	/* fill the one row program memory buffer */
-	for (j = 0; j < ROW_BYTE_COUNT / 4; i += 4, j += 4, addr += 4)
+	/* fill the one row program memory buffer 3 bytes at a time */
+	for (j = 0; j < (ROW_BYTE_COUNT / 3); i += 3, j += 3, addr += 3)
 	{
-	  const uint32_t tmp = read_uint32(buf + i);
+	  const uint32_t tmp = buf[i];
 	  load_latches(HI(addr), LO(addr), HI(tmp), LO(tmp));
 	}
 
