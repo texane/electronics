@@ -90,6 +90,23 @@ static inline int is_mark(char c)
   return 0;
 }
 
+static inline int skip_newline(const char** p, size_t* n)
+{
+#if 0 /* 0x0d 0x0a sequence */
+  if (*n < 2) return -1;
+  if (((*p)[0] != 0x0d) || ((*p)[1] != 0x0a)) goto on_error;
+  *p += 2;
+  *n -= 2;
+#else
+  if ((*n) == 0) return -1;
+  if ((*p)[0] != 0x0a) return -1;
+  *p += 1;
+  *n -= 1;
+#endif
+
+  return 0;
+}
+
 static inline int is_hex(char c)
 {
   if ((c >= '0') && (c <= '9')) return 1;
@@ -214,17 +231,7 @@ static int hex_read_lines(const char* filename, hex_line_t** first_line)
     /* todo: check complement */
 
     /* skip newline */
-#if 0 /* 0x0d 0x0a sequence */
-    if (n < 2) goto on_error;
-    if ((p[0] != 0x0d) || (p[1] != 0x0a)) goto on_error;
-    p += 2;
-    n -= 2;
-#else
-    if (n == 0) goto on_error;
-    if (p[0] != 0x0a) goto on_error;
-    p += 1;
-    n -= 1;
-#endif
+    skip_newline(&p, &n);
   }
 
   /* success */
