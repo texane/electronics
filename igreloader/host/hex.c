@@ -9,6 +9,12 @@
 #include <sys/mman.h>
 
 
+/* dspic33f related */
+
+#define PAGE_INSN_COUNT 512
+#define PAGE_BYTE_COUNT (PAGE_INSN_COUNT * 3)
+
+
 /* endianness */
 
 #define CONFIG_USE_LENDIAN 1
@@ -104,24 +110,25 @@ static void unmap_file(mapped_file_t * mf)
 
 /* hex file format */
 
-typedef struct hex_line
+typedef struct hex_range
 {
-  struct hex_line* next;
+  struct hex_range* next;
+  struct hex_range* prev;
 
   uint32_t addr;
 
   size_t size;
   uint8_t buf[1];
 
-} hex_line_t;
+} hex_range_t;
 
-static void hex_free_lines(hex_line_t* lines)
+static void hex_free_ranges(hex_range_t* ranges)
 {
-  hex_line_t* tmp;
-  while (lines != NULL)
+  hex_range_t* tmp;
+  while (ranges != NULL)
   {
-    tmp = lines;
-    lines = lines->next;
+    tmp = ranges;
+    ranges = ranges->next;
     free(tmp);
   }
 }
@@ -195,7 +202,7 @@ static int next_digit
   return 0;
 }
 
-static int hex_read_lines(const char* filename, hex_line_t** first_line)
+static int hex_read_ranges(const char* filename, hex_range_t** first_range)
 {
   int err = -1;
   mapped_file_t mf = MAPPED_FILE_INITIALIZER;
@@ -208,17 +215,17 @@ static int hex_read_lines(const char* filename, hex_line_t** first_line)
   unsigned int compl;
   unsigned int hiaddr = 0;
   unsigned int loaddr;
-  hex_line_t* cur_line;
-  hex_line_t* prev_line = NULL;
+  hex_range_t* cur_range;
+  hex_range_t* prev_range = NULL;
 
-  *first_line = NULL;
+  *first_range = NULL;
 
   /* map the file */
   if (map_file(&mf, filename)) goto on_error;
   p = (const char*)mf.base;
   n = mf.len;
 
-  /* build line linked list */
+  /* build range linked list */
   while (1)
   {
     /* skip col */
@@ -244,26 +251,27 @@ static int hex_read_lines(const char* filename, hex_line_t** first_line)
 
     if (mark == 0x00)
     {
-      /* data line */
+      /* data range */
 
-      /* allocate and fill line */
-      cur_line = malloc(offsetof(hex_line_t, buf) + count);
-      cur_line->next = NULL;
-      cur_line->addr = (hiaddr << 16) | loaddr;
-      cur_line->size = count;
+      /* allocate and fill range */
+      cur_range = malloc(offsetof(hex_range_t, buf) + count);
+      cur_range->next = NULL;
+      cur_range->prev = prev_range;
+      cur_range->addr = (hiaddr << 16) | loaddr;
+      cur_range->size = count;
 
-      /* link the new line */
-      if (prev_line == NULL)
-	*first_line = cur_line;
+      /* link the new range */
+      if (prev_range == NULL)
+	*first_range = cur_range;
       else
-	prev_line->next = cur_line;
-      prev_line = cur_line;
+	prev_range->next = cur_range;
+      prev_range = cur_range;
 
       /* read data bytes */
       for (off = 0; off < count; ++off)
       {
 	if (next_digit(&data, 2, &p, &n)) goto on_error;
-	cur_line->buf[off] = data;
+	cur_range->buf[off] = data;
       }
     }
     else if (mark == 0x04)
@@ -281,7 +289,7 @@ static int hex_read_lines(const char* filename, hex_line_t** first_line)
     if (next_digit(&compl, 2, &p, &n)) goto on_error;
     /* todo: check complement */
 
-    /* skip newline */
+    /* skip newrange */
     skip_newline(&p, &n);
   }
 
@@ -291,46 +299,223 @@ static int hex_read_lines(const char* filename, hex_line_t** first_line)
  on_error:
   if (mf.base != NULL) unmap_file(&mf);
 
-  if ((err != 0) && *first_line)
+  if ((err != 0) && *first_range)
   {
-    hex_free_lines(*first_line);
-    *first_line = NULL;
+    hex_free_ranges(*first_range);
+    *first_range = NULL;
   }
 
   return err;
 }
 
+static inline void swap_ptrs(void** a, void** b)
+{
+  void* const tmp = *a;
+  *a = *b;
+  *b = tmp;
+}
+
+static void hex_sort_ranges(hex_range_t** ranges)
+{
+  /* sort by addr, assume non overlapping ranges */
+
+  hex_range_t* i;
+  hex_range_t* next_i;
+  hex_range_t* j;
+  hex_range_t* k;
+
+  for (i = *ranges; i != NULL; i = next_i)
+  {
+    k = i;
+    next_i = i->next;
+
+    for (j = next_i; j != NULL; j = j->next)
+      if (j->addr < k->addr) k = j;
+
+    /* swap if smaller found */
+    if (i != k)
+    {
+      /* head special case */
+      if (i->prev == NULL) *ranges = k;
+      else i->prev->next = k;
+
+      /* tail special case */
+      if (k->next != NULL) k->next->prev = i;
+
+      /* neighbor nodes special case */
+      if (next_i != k)
+      {
+	i->next->prev = k;
+	k->prev->next = i;
+	swap_ptrs((void**)&i->prev, (void**)&k->prev);
+	swap_ptrs((void**)&i->next, (void**)&k->next);
+      }
+      else
+      {
+	i->next = k->next;
+	k->next = i;
+	k->prev = i->prev;
+	i->prev = k;
+      }
+    }
+  }
+}
+
+static void hex_paginate_ranges(hex_range_t** ranges)
+{
+  /* convert from basic hex format to pages */
+
+  /* current non paged range */
+  hex_range_t* pos = NULL;
+
+  /* first, last non paged ranges in the paged range */
+  hex_range_t* first;
+  hex_range_t* pos;
+
+  /* offset from first->addr */
+  size_t first_off;
+
+  /* offset from new_range->buf */
+  size_t new_off;
+
+  /* offset from pos->addr */
+  size_t pos_off;
+
+  /* newly paged range */
+  hex_range_t* new_range;
+
+  /* previous paged range */
+  hex_range_t* prev_range = NULL;
+
+  /* new paged list head */
+  hex_range_t* new_head = NULL;
+
+  /* current paged range size */
+  size_t sumed_size;
+
+  /* working variables */
+  size_t tmp;
+  size_t i;
+
+  /* algorithm assumes ranges sorted */
+  hex_sort_ranges(ranges);
+
+  sumed_size = 0;
+  first_off = 0;
+
+ split_range:
+
+  /* add to sumed_size and adjust */
+  sumed_size += pos->size;
+  if (pos == first) sumed_size -= first_off;
+  if (sumed_size > PAGE_BYTE_COUNT) sumed_size = PAGE_BYTE_COUNT;
+
+  if ((pos->next == NULL) || (sumed_size == PAGE_BYTE_COUNT))
+  {
+    /* create a new range */
+    new_range = malloc(offsetof(hex_range_t, buf), sumed_size);
+    new_range->next = NULL;
+    new_range->prev = prev_range;
+    new_range->addr = first_range->addr + first_off;
+    new_range->size = sumed_size;
+    if (new_head == NULL) new_head = new_range;
+    else prev_range->next = new_range;
+    prev_range = new_range;
+
+    /* copy [first->addr + off, first->addr + sumed_size] */
+    pos = first;
+    pos_off = 0; /* avoid warning */
+    new_off = 0;
+    while (sumed_size)
+    {
+      tmp = pos->size;
+
+      pos_off = 0;
+      if (pos == first)
+      {
+	pos_off = first_off;
+	tmp -= first_off;
+      }
+
+      if (tmp > sumed_size) tmp = sumed_size;
+
+      memcpy(new_range->buf + new_off, pos->buf + pos_off, tmp);
+
+      sumed_size -= tmp;
+      new_off += tmp;
+
+      if (tmp == (pos->size - pos_off)) pos = pos->next;
+    }
+
+    /* update and continue in the current non paged range */
+    first = pos;
+    first_off = pos_off;
+    sumed_size = 0;
+    goto split_range;
+  }
+  else if (pos_size)
+  {
+    /* add to sumed_size and consume next range */
+    sumed_size += pos_size;
+    pos = pos->next;
+    goto split_range;
+  }
+  /* else, done */
+
+  /* release no longer used ranges */
+  hex_free_ranges(*ranges);
+  *ranges = new_head;
+}
+
+static int hex_check_ranges(const hex_range_t* ranges)
+{
+  return 0;
+}
+
+#if 1 /* unused */
+
+#include <stdio.h>
+
+static void hex_print_ranges(const hex_range_t* ranges)
+{
+  for (; ranges != NULL; ranges = ranges->next)
+  {
+    printf("[ %x - %x [ (%x)\n",
+	   ranges->addr, ranges->addr + ranges->size, ranges->size);
+  }
+}
+
+#endif /* unused */
+
 
 /* write hex file to flash */
 
-static int do_program(void* dev, hex_line_t* lines)
+static int do_program(void* dev, hex_range_t* ranges)
 {
   size_t i;
   uint8_t buf[8];
 
-  for (; lines != NULL; lines = lines->next)
+  for (; ranges != NULL; ranges = ranges->next)
   {
-    /* check line size */
-#define PAGE_INSN_COUNT 512
-#define PAGE_BYTE_COUNT (PAGE_INSN_COUNT * 3)
-    if (lines->size > PAGE_BYTE_COUNT) return -1;
+    /* check range size */
+    if (ranges->size > PAGE_BYTE_COUNT) return -1;
 
     /* todo: check device addr range */
 
     /* initiate write sequence */
 #define CMD_ID_WRITE_PROGRAM 0
     buf[0] = CMD_ID_WRITE_PROGRAM;
-    write_uint32(buf + 1, lines->addr);
-    write_uint16(buf + 5, lines->size);
+    write_uint32(buf + 1, ranges->addr);
+    write_uint16(buf + 5, ranges->size);
 
     /* todo: com_send(dev, buf); */
 
     /* todo: wait for command ack */
 
     /* send the page 8 bytes at a time */
-    for (i = 0; i < lines->size; i += 8)
+    for (i = 0; i < ranges->size; i += 8)
     {
-      /* todo: com_send(dev, lines->buf + i); */
+      /* todo: com_send(dev, ranges->buf + i); */
 
       /* todo: wait for data ack */
     }
@@ -353,25 +538,35 @@ int main(int ac, char** av)
   const char* const devname = av[1];
   const char* const filename = av[2];
 
-  hex_line_t* lines = NULL;
+  hex_range_t* ranges = NULL;
 
-  if (hex_read_lines(filename, &lines) == -1)
+  if (hex_read_ranges(filename, &ranges) == -1)
   {
     printf("invalid hex file\n");
     goto on_error;
   }
 
+  if (hex_check_ranges(ranges) == -1)
+  {
+    printf("invalid range\n");
+    goto on_error;
+  }
+
+  hex_paginate_ranges(&ranges);
+  printf("paged\n");
+  hex_print_ranges(ranges);
+
   /* todo: initialize serial */
 
   /* program device flash */
-  if (do_program(NULL, lines) == -1)
+  if (do_program(NULL, ranges) == -1)
   {
     printf("programming failed\n");
     goto on_error;
   }
 
  on_error:
-  if (lines != NULL) hex_free_lines(lines);
+  if (ranges != NULL) hex_free_ranges(ranges);
 
   return 0;
 }
