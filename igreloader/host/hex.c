@@ -173,49 +173,58 @@ static int hex_read_lines(const char* filename, hex_line_t** first_line)
     /* block mark */
     if (next_digit(&mark, 2, &p, &n)) goto on_error;
     if (is_mark(mark) == 0) goto on_error;
-    
-    /* extended addressing */
-    if (mark == 0x04)
+
+    if (mark == 0x00)
     {
+      /* data line */
+
+      /* allocate and fill line */
+      cur_line = malloc(offsetof(hex_line_t, buf) + count);
+      cur_line->next = NULL;
+      cur_line->addr = (hiaddr << 16) | loaddr;
+      cur_line->size = count;
+
+      /* link the new line */
+      if (prev_line == NULL)
+	*first_line = cur_line;
+      else
+	prev_line->next = cur_line;
+      prev_line = cur_line;
+
+      /* read data bytes */
+      for (off = 0; off < count; ++off)
+      {
+	if (next_digit(&data, 2, &p, &n)) goto on_error;
+	cur_line->buf[off] = data;
+      }
+    }
+    else if (mark == 0x04)
+    {
+      /* extended addressing */
       if (next_digit(&hiaddr, 4, &p, &n)) goto on_error;
     }
-
-    /* allocate and fill line */
-    cur_line = malloc(offsetof(hex_line_t, buf) + count);
-    cur_line->next = NULL;
-    cur_line->addr = (hiaddr << 16) | loaddr;
-    cur_line->size = count;
-
-    /* link the new line */
-    if (prev_line == NULL)
-      *first_line = cur_line;
-    else
-      prev_line->next = cur_line;
-    prev_line = cur_line;
+    else if (mark == 0x01)
+    {
+      /* end of file */
+      break ;
+    }
 
     /* complement */
     if (next_digit(&compl, 2, &p, &n)) goto on_error;
-
-    /* read data bytes */
-    for (off = 0; off < count; ++off)
-    {
-      if (next_digit(&data, 2, &p, &n)) goto on_error;
-      cur_line->buf[off] = data;
-    }
-
     /* todo: check complement */
 
     /* skip newline */
+#if 0 /* 0x0d 0x0a sequence */
     if (n < 2) goto on_error;
     if ((p[0] != 0x0d) || (p[1] != 0x0a)) goto on_error;
     p += 2;
     n -= 2;
-
-    /* end of file */
-    if (mark == 0x00)
-    {
-      break ;
-    }
+#else
+    if (n == 0) goto on_error;
+    if (p[0] != 0x0a) goto on_error;
+    p += 1;
+    n -= 1;
+#endif
   }
 
   /* success */
@@ -235,6 +244,8 @@ static int hex_read_lines(const char* filename, hex_line_t** first_line)
 
 /* main */
 
+#include <stdio.h>
+
 int main(int ac, char** av)
 {
   /* command line: ./a.out <device> <file.hex> */
@@ -245,7 +256,10 @@ int main(int ac, char** av)
   hex_line_t* lines = NULL;
 
   if (hex_read_lines(filename, &lines) == -1)
+  {
+    printf("invalid hex file\n");
     goto on_error;
+  }
 
   /* todo: initialize serial */
 
