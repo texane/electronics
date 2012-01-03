@@ -278,6 +278,14 @@ static inline void erase_page(uint16_t addrhi, uint16_t addrlo)
 #endif
 }
 
+static void read_mem
+(uint16_t hiaddr, uint16_t loaddr, uint16_t fu, uint16_t bar)
+{
+  /* read a flash page at {hi,lo}addr */
+
+  /* todo */
+}
+
 static inline void write_mem(void)
 {
   /* write one program memory row */
@@ -324,38 +332,50 @@ static void read_process_cmd(void)
 #define ROW_BYTE_COUNT (ROW_INSN_COUNT * 3)
 #define PAGE_INSN_COUNT 512
 #define PAGE_BYTE_COUNT (PAGE_INSN_COUNT * 3)
-  static uint8_t buf[PAGE_BYTE_COUNT];
 
+  /* 8 is added to avoid overflow in com_read */
+  static uint8_t page_buf[PAGE_BYTE_COUNT + 8];
+
+  uint8_t cmd_buf[8];
   uint32_t addr;
   uint16_t size;
+  uint16_t off;
   uint16_t i;
   uint16_t j;
 
-  com_read(buf);
+  com_read(cmd_buf);
 
-  switch (read_uint8(buf + 0))
+  switch (read_uint8(cmd_buf + 0))
   {
   case CMD_ID_WRITE_PROGRAM:
     {
-      /* write a block of size < PAGE_BYTE_COUNT */
+      /* write a program page */
 
-      addr = read_uint32(buf + 1);
-      size = read_uint16(buf + 5);
+      addr = read_uint32(cmd_buf + 1);
+      size = read_uint16(cmd_buf + 5);
 
       /* todo: send command ack */
 
-      /* receive the page */
-      for (i = 0; i < PAGE_BYTE_COUNT; i += COM_FRAME_SIZE)
+      /* read the page before erasing, if not a full page. */
+      off = 0;
+      if (size != PAGE_BYTE_COUNT)
       {
-	com_read(buf + i);
-
-	/* todo: send data ack */
+	off = addr % PAGE_BYTE_COUNT;
+	read_page(HI(addr), LO(addr), HI(page_buf), LO(page_buf));
       }
 
       /* erase page */
       erase_page(HI(addr), LO(addr));
 
-      /* i incremented by inner loop */
+      /* receive the page */
+      for (i = 0; i < size; i += COM_FRAME_SIZE)
+      {
+	com_read(page_buf + off + i);
+
+	/* todo: send data ack */
+      }
+
+      /* write a whole page. i incremented by inner loop */
       for (i = 0; i < PAGE_BYTE_COUNT; )
       {
 	/* fill the one row program memory buffer 3 bytes at a time */
