@@ -327,6 +327,7 @@ static void read_process_cmd(void)
   static uint8_t buf[PAGE_BYTE_COUNT];
 
   uint32_t addr;
+  uint16_t size;
   uint16_t i;
   uint16_t j;
 
@@ -336,13 +337,20 @@ static void read_process_cmd(void)
   {
   case CMD_ID_WRITE_PROGRAM:
     {
-      /* write a block of size PAGE_BYTE_COUNT */
+      /* write a block of size < PAGE_BYTE_COUNT */
 
       addr = read_uint32(buf + 1);
+      size = read_uint16(buf + 5);
+
+      /* todo: send command ack */
 
       /* receive the page */
       for (i = 0; i < PAGE_BYTE_COUNT; i += COM_FRAME_SIZE)
+      {
 	com_read(buf + i);
+
+	/* todo: send data ack */
+      }
 
       /* erase page */
       erase_page(HI(addr), LO(addr));
@@ -360,6 +368,8 @@ static void read_process_cmd(void)
 	/* write latches to memory */
 	write_mem();
       }
+
+      /* todo: send page programming ack */
 
       break ;
     }
