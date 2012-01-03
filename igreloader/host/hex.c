@@ -361,6 +361,8 @@ static void hex_sort_ranges(hex_range_t** ranges)
   }
 }
 
+#if 0 /* unused, broken */
+
 static void hex_paginate_ranges(hex_range_t** ranges)
 {
   /* convert from basic hex format to pages */
@@ -467,6 +469,64 @@ static void hex_paginate_ranges(hex_range_t** ranges)
   *ranges = new_head;
 }
 
+#endif /* unused, broken */
+
+static void hex_merge_ranges(hex_range_t** ranges)
+{
+  /* merge the contiguous ranges */
+
+  hex_range_t* saved_ranges;
+
+  hex_range_t* first;
+  hex_range_t* last;
+  hex_range_t* pos;
+
+  hex_range_t* cur_range;
+  hex_range_t* prev_range = NULL;
+
+  size_t off;
+  size_t size;
+
+  hex_sort_ranges(ranges);
+
+  first = *ranges;
+  saved_ranges = *ranges;
+  *ranges = NULL;
+
+  while (first != NULL)
+  {
+    /* find [first, last[ */
+    size = first->size;
+    for (last = first->next; last != NULL; last = last->next)
+    {
+      if (last->addr != (last->prev->addr + last->prev->size)) break ;
+      size += last->size;
+    }
+
+    /* create a merged range */
+    cur_range = malloc(offsetof(hex_range_t, buf) + size);
+    cur_range->next = NULL;
+    cur_range->prev = prev_range;
+    cur_range->addr = first->addr;
+    cur_range->size = size;
+    if (prev_range == NULL) *ranges = cur_range;
+    else prev_range->next = cur_range;
+    prev_range = cur_range;
+
+    off = 0;
+    for (pos = first; pos != last; pos = pos->next)
+    {
+      memcpy(cur_range->buf + off, pos->buf, pos->size);
+      off += pos->size;
+    }
+
+    first = last;
+  }
+
+  hex_free_ranges(saved_ranges);
+}
+
+__attribute__((unused))
 static int hex_check_ranges(const hex_range_t* ranges)
 {
   return 0;
@@ -476,6 +536,7 @@ static int hex_check_ranges(const hex_range_t* ranges)
 
 #include <stdio.h>
 
+__attribute__((unused))
 static void hex_print_ranges(const hex_range_t* ranges)
 {
   for (; ranges != NULL; ranges = ranges->next)
@@ -490,38 +551,68 @@ static void hex_print_ranges(const hex_range_t* ranges)
 
 /* write hex file to flash */
 
-static int do_program(void* dev, hex_range_t* ranges)
+static int do_program(void* dev, const char* filename)
 {
+  /* filename a hex file */
+
+  hex_range_t* ranges;
+  hex_range_t* pos;
+  size_t off;
   size_t i;
+  size_t page_size;
   uint8_t buf[8];
 
-  for (; ranges != NULL; ranges = ranges->next)
+  if (hex_read_ranges(filename, &ranges) == -1)
   {
-    /* check range size */
-    if (ranges->size > PAGE_BYTE_COUNT) return -1;
-
-    /* todo: check device addr range */
-
-    /* initiate write sequence */
-#define CMD_ID_WRITE_PROGRAM 0
-    buf[0] = CMD_ID_WRITE_PROGRAM;
-    write_uint32(buf + 1, ranges->addr);
-    write_uint16(buf + 5, ranges->size);
-
-    /* todo: com_send(dev, buf); */
-
-    /* todo: wait for command ack */
-
-    /* send the page 8 bytes at a time */
-    for (i = 0; i < ranges->size; i += 8)
-    {
-      /* todo: com_send(dev, ranges->buf + i); */
-
-      /* todo: wait for data ack */
-    }
-
-    /* todo: wait for page programming ack */
+    printf("invalid hex file\n");
+    goto on_error;
   }
+
+  hex_merge_ranges(&ranges);
+
+  /* for each range, write pages */
+  for (pos = ranges; pos != NULL; pos = pos->next)
+  {
+    /* handle unaligned first page */
+    off = 0;
+    page_size = PAGE_BYTE_COUNT - (pos->addr % PAGE_BYTE_COUNT);
+
+    while (1)
+    {
+      /* adjust page size */
+      page_size = PAGE_BYTE_COUNT;
+      if ((off + page_size) > pos->size) page_size = pos->size - off;
+
+      /* todo: check device addr range */
+
+      /* initiate write sequence */
+#define CMD_ID_WRITE_PROGRAM 0
+      buf[0] = CMD_ID_WRITE_PROGRAM;
+      write_uint32(buf + 1, pos->addr + off);
+      write_uint16(buf + 5, page_size);
+
+      /* todo: com_send(dev, buf); */
+
+      /* todo: wait for command ack */
+
+      /* send the page 8 bytes at a time */
+      for (i = 0; i < pos->size; i += 8)
+      {
+	/* todo: com_send(dev, pos->buf + off + i); */
+
+	/* todo: wait for data ack */
+      }
+
+      /* todo: wait for page programming ack */
+
+      /* next page or done */
+      off += page_size;
+      if (off == pos->size) break ;
+    }
+  }
+
+ on_error:
+  if (ranges != NULL) hex_free_ranges(ranges);
 
   return 0;
 }
@@ -538,35 +629,14 @@ int main(int ac, char** av)
   const char* const devname = av[1];
   const char* const filename = av[2];
 
-  hex_range_t* ranges = NULL;
-
-  if (hex_read_ranges(filename, &ranges) == -1)
-  {
-    printf("invalid hex file\n");
-    goto on_error;
-  }
-
-  if (hex_check_ranges(ranges) == -1)
-  {
-    printf("invalid range\n");
-    goto on_error;
-  }
-
-  hex_paginate_ranges(&ranges);
-  printf("paged\n");
-  hex_print_ranges(ranges);
-
   /* todo: initialize serial */
 
   /* program device flash */
-  if (do_program(NULL, ranges) == -1)
+  if (do_program(NULL, filename) == -1)
   {
     printf("programming failed\n");
-    goto on_error;
+    return -1;
   }
-
- on_error:
-  if (ranges != NULL) hex_free_ranges(ranges);
 
   return 0;
 }
