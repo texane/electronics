@@ -9,6 +9,57 @@
 #include <sys/mman.h>
 
 
+/* endianness */
+
+#define CONFIG_USE_LENDIAN 1
+
+#if CONFIG_USE_LENDIAN
+
+static inline uint16_t read_uint16(uint8_t* s)
+{
+  return *(uint16_t*)s;
+}
+
+static inline uint32_t read_uint32(uint8_t* s)
+{
+  return *(uint32_t*)s;
+}
+
+static inline void write_uint16(uint8_t* s, uint16_t x)
+{
+  *(uint16_t*)s = x;
+}
+
+static inline void write_uint32(uint8_t* s, uint32_t x)
+{
+  *(uint32_t*)s = x;
+}
+
+#else /* local is big endian */
+
+static inline uint16_t read_uint16(uint8_t* s)
+{
+  /* todo */
+}
+
+static inline uint32_t read_uint32(uint8_t* s)
+{
+  /* todo */
+}
+
+static inline void write_uint16(uint8_t* s, uint16_t x)
+{
+  /* todo */
+}
+
+static inline void write_uint32(uint8_t* s, uint32_t x)
+{
+  /* todo */
+}
+
+#endif /* CONFIG_USE_LENDIAN */
+
+
 /* memory mapped file */
 
 typedef struct mapped_file
@@ -249,6 +300,48 @@ static int hex_read_lines(const char* filename, hex_line_t** first_line)
   return err;
 }
 
+
+/* write hex file to flash */
+
+static int do_program(void* dev, hex_line_t* lines)
+{
+  size_t i;
+  uint8_t buf[8];
+
+  for (; lines != NULL; lines = lines->next)
+  {
+    /* check line size */
+#define PAGE_INSN_COUNT 512
+#define PAGE_BYTE_COUNT (PAGE_INSN_COUNT * 3)
+    if (lines->size > PAGE_BYTE_COUNT) return -1;
+
+    /* todo: check device addr range */
+
+    /* initiate write sequence */
+#define CMD_ID_WRITE_PROGRAM 0
+    buf[0] = CMD_ID_WRITE_PROGRAM;
+    write_uint32(buf + 1, lines->addr);
+    write_uint16(buf + 5, lines->size);
+
+    /* todo: com_send(dev, buf); */
+
+    /* todo: wait for command ack */
+
+    /* send the page 8 bytes at a time */
+    for (i = 0; i < lines->size; i += 8)
+    {
+      /* todo: com_send(dev, lines->buf + i); */
+
+      /* todo: wait for data ack */
+    }
+
+    /* todo: wait for page programming ack */
+  }
+
+  return 0;
+}
+
+
 /* main */
 
 #include <stdio.h>
@@ -269,6 +362,13 @@ int main(int ac, char** av)
   }
 
   /* todo: initialize serial */
+
+  /* program device flash */
+  if (do_program(NULL, lines) == -1)
+  {
+    printf("programming failed\n");
+    goto on_error;
+  }
 
  on_error:
   if (lines != NULL) hex_free_lines(lines);
