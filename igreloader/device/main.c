@@ -140,7 +140,7 @@ static inline void write_uint32(uint8_t* s, uint32_t x)
 #endif /* CONFIG_USE_LENDIAN */
 
 
-/* nibbling */
+/* get 16 bits parts from 32 bits value */
 
 #define LO(__x) (((__x) >> 0) & 0xffff)
 #define HI(__x) (((__x) >> 16) & 0xffff)
@@ -237,14 +237,21 @@ static void uart_read(uint8_t* s)
 /* flash programming routines */
 /* dspic33f_bootloader/msstate/bootloader/24h_24f_target/mem.c */
 
-static inline void write_mem(uint16_t val)
+static inline void write_mem(void)
 {
+  /* write one program memory row */
+  asm("mov #0x4001, W0");
   asm("mov W0, NVMCON");
-  __builtin_write_NVM();
 
-  /* wait for write end */
-  asm("1: btsc NVMCON, #15");
-  asm("bra 1b");
+  /* refer to erase_page */
+  asm("disi #5");
+  asm("mov #0x55, W0");
+  asm("mov W0, NVMKEY");
+  asm("mov #0xaa, W1");
+  asm("mov W1, NVMKEY");
+  asm("bset NVMCOM, #15");
+  asm("nop");
+  asm("nop");
 }
 
 static inline void load_addr(uint16_t nvmadru, uint16_t nvmadr)
@@ -269,19 +276,44 @@ static inline uint32_t read_latch(uint16_t addrhi, uint16_t addrlo)
 
 }
 
-static inline void erase_page(uint16_t addrhi, uint16_t addrlo, uint16_t val)
+static inline void erase_page(uint16_t addrhi, uint16_t addrlo)
 {
+  /* dspic ref man, example 5-1 */
+
+#if 0
   asm("push TBLPAG");
-  asm("mov W2, NVMCON");
+#endif
+
+  asm("mov #0x4042, W2");
+  asm("mov W2, NVMCOM");
 
   asm("mov W0, TBLPAG");
   asm("tblwtl W1, [W1]");
 
-  __builtin_write_NVM();
+  /* disable interrupts during the following insn block */
+  asm("disi #5");
 
+  /* write the key */
+  asm("mov #0x55, W0");
+  asm("mov W0, NVMKEY");
+  asm("mov #0xaa, W1");
+  asm("mov W1, NVMKEY");
+
+  /* start erase sequence */
+  asm("bset NVMCOM, #15");
+
+  /* from example */
+#if 1
+  asm("nop");
+  asm("nop");
+#else
   asm("1: btsc NVMCON, #15");
   asm("bra 1b");
+#endif
+
+#if 0
   asm("pop TBLPAG");
+#endif
 }
 
 
@@ -303,7 +335,8 @@ static void read_process_cmd(void)
   static uint8_t buf[PAGE_BYTE_COUNT];
 
   uint32_t addr;
-  uint16_t off;
+  uint16_t i;
+  uint16_t j;
 
   com_read(buf);
 
@@ -311,28 +344,51 @@ static void read_process_cmd(void)
   {
   case CMD_ID_WRITE_PROGRAM:
     {
+      /* write a block of size PAGE_BYTE_COUNT */
+
       addr = read_uint32(buf + 1);
 
-      /* todo: ack */
-      /* todo: receive */
-      /* todo: ack */
-      /* todo: write */
-
       /* receive the page */
-      for (off = 0; off < PAGE_BYTE_COUNT; off += COM_FRAME_SIZE)
-	com_read(buf + off);
+      for (i = 0; i < PAGE_BYTE_COUNT; i += COM_FRAME_SIZE)
+	com_read(buf + i);
 
       /* erase page */
-      erase_page(HI(addr), LO(addr), );
+      erase_page(HI(addr), LO(addr));
 
-      for (off = 0; off < PAGE_BYTE_COUNT; off += ROW_BYTE_COUNT, addr += ROW_BYTE_COUNT)
+      /* i incremented by inner loop */
+      for (i = 0; i < PAGE_BYTE_COUNT; )
       {
-	/* set latches */
-	load_latches(HI(addr), LO(addr), , );
+	/* fill the one row program memory buffer */
+	for (j = 0; j < ROW_BYTE_COUNT / 4; i += 4, j += 4, addr += 4)
+	{
+	  const uint32_t tmp = read_uint32(buf + i);
+	  load_latches(HI(addr), LO(addr), HI(tmp), LO(tmp));
+	}
 
 	/* write latches to memory */
 	write_mem();
       }
+
+      break ;
+    }
+
+  case CMD_ID_WRITE_CONFIG:
+    {
+      /* todo */
+
+      break ;
+    }
+
+  case CMD_ID_READ_PROGRAM:
+    {
+      /* todo */
+
+      break ;
+    }
+
+  case CMD_ID_READ_CONFIG:
+    {
+      /* todo */
 
       break ;
     }
