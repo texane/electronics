@@ -30,7 +30,7 @@ static int map_file(mapped_file_t* mf, const char* path)
   if (fstat(fd, &st) == -1) goto on_error; 
 
   mf->base = (uint8_t*)mmap(NULL, st.st_size, PROT_READ, MAP_SHARED, fd, 0);
-  if (mf->base == MAP_FAILED) goot on_error;
+  if (mf->base == MAP_FAILED) goto on_error;
 
   mf->len = st.st_size;
 
@@ -133,6 +133,7 @@ static int hex_read_lines(const char* filename, hex_line_t** first_line)
   mapped_file_t mf = MAPPED_FILE_INITIALIZER;
   const char* p;
   size_t n;
+  unsigned int data;
   unsigned int count;
   unsigned int off;
   unsigned int mark;
@@ -145,11 +146,9 @@ static int hex_read_lines(const char* filename, hex_line_t** first_line)
   *first_line = NULL;
 
   /* map the file */
-  if (map_failed(&mf, filename)) goto on_error;
+  if (map_file(&mf, filename)) goto on_error;
   p = (const char*)mf.base;
   n = mf.len;
-
-  if (map_file(filename, &p, &n)) goto on_error;
 
   /* build line linked list */
   while (1)
@@ -176,7 +175,7 @@ static int hex_read_lines(const char* filename, hex_line_t** first_line)
     if (is_mark(mark) == 0) goto on_error;
     
     /* extended addressing */
-    if (mark = 0x04)
+    if (mark == 0x04)
     {
       if (next_digit(&hiaddr, 4, &p, &n)) goto on_error;
     }
@@ -200,7 +199,8 @@ static int hex_read_lines(const char* filename, hex_line_t** first_line)
     /* read data bytes */
     for (off = 0; off < count; ++off)
     {
-      if (next_digit(&cur_line->buf[off], 2, &p, &n)) goto on_error;
+      if (next_digit(&data, 2, &p, &n)) goto on_error;
+      cur_line->buf[off] = data;
     }
 
     /* todo: check complement */
@@ -219,17 +219,15 @@ static int hex_read_lines(const char* filename, hex_line_t** first_line)
   }
 
   /* success */
-  *first_line = saved_line;
-  *head = ;
   err = 0;
 
  on_error:
   if (mf.base != NULL) unmap_file(&mf);
 
-  if ((err != 0) && *lines)
+  if ((err != 0) && *first_line)
   {
-    hex_free_lines(*lines);
-    *lines = NULL;
+    hex_free_lines(*first_line);
+    *first_line = NULL;
   }
 
   return err;
