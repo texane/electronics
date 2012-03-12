@@ -11,8 +11,39 @@
 
 /* dspic33f related */
 
-#define PAGE_INSN_COUNT 512
-#define PAGE_BYTE_COUNT (PAGE_INSN_COUNT * 3)
+#define FLASH_PAGE_SIZE (512 * 3)
+
+static inline uint32_t get_mem_flags(uint32_t addr, uint16_t size)
+{
+#define MEM_FLAG_USER (1 << 0) /* config otherwise */
+#define MEM_FLAG_VECTOR (1 << 1)
+#define MEM_FLAG_FLASH (1 << 2)
+#define MEM_FLAG_DCR (1 << 3) /* device config register */
+#define MEM_FLAG_DEVID (1 << 4)
+#define MEM_FLAG_RESERVED (1 << 5)
+
+  const uint32_t hi = addr + size;
+
+  uint32_t flags = 0;
+
+  if (hi <= 0x800000)
+  {
+    /* user memory space */
+    flags |= MEM_FLAG_USER;
+    if (hi <= 0x200) flags |= MEM_FLAG_VECTOR;
+    else if (hi <= 0x15800) flags |= MEM_FLAG_FLASH;
+    else flags |= MEM_FLAG_RESERVED;
+  }
+  else
+  {
+    /* config memory space */
+    if ((addr >= 0xf80000) && (hi <= 0xf80018)) flags |= MEM_FLAG_DCR;
+    else if ((addr >= 0xff0000) && (hi <= 0xff0002)) flags |= MEM_FLAG_DEVID;
+    else flags |= MEM_FLAG_RESERVED;
+  }
+
+  return flags;
+}
 
 
 /* endianness */
@@ -410,9 +441,9 @@ static void hex_paginate_ranges(hex_range_t** ranges)
   /* add to sumed_size and adjust */
   sumed_size += pos->size;
   if (pos == first) sumed_size -= first_off;
-  if (sumed_size > PAGE_BYTE_COUNT) sumed_size = PAGE_BYTE_COUNT;
+  if (sumed_size > FLASH_PAGE_SIZE) sumed_size = FLASH_PAGE_SIZE;
 
-  if ((pos->next == NULL) || (sumed_size == PAGE_BYTE_COUNT))
+  if ((pos->next == NULL) || (sumed_size == FLASH_PAGE_SIZE))
   {
     /* create a new range */
     new_range = malloc(offsetof(hex_range_t, buf), sumed_size);
@@ -568,6 +599,9 @@ static int do_program(void* dev, const char* filename)
     goto on_error;
   }
 
+  hex_print_ranges(ranges);
+  printf("--\n");
+
   hex_merge_ranges(&ranges);
 
   /* for each range, write pages */
@@ -575,12 +609,16 @@ static int do_program(void* dev, const char* filename)
   {
     /* handle unaligned first page */
     off = 0;
-    page_size = PAGE_BYTE_COUNT - (pos->addr % PAGE_BYTE_COUNT);
+    page_size = FLASH_PAGE_SIZE - (pos->addr % FLASH_PAGE_SIZE);
+
+    printf("range [%x - %x[: 0x%x\n",
+	   pos->addr, pos->addr + pos->size,
+	   get_mem_flags(pos->addr, pos->size));
 
     while (1)
     {
       /* adjust page size */
-      page_size = PAGE_BYTE_COUNT;
+      page_size = FLASH_PAGE_SIZE;
       if ((off + page_size) > pos->size) page_size = pos->size - off;
 
       /* todo: check device addr range */
