@@ -1,2 +1,5 @@
 [ packaging information ]
 http://www.intersil.com/design/packages/plastic.asp#Mini%20Small%20Outline%20Plastic%20Packages%20%28MSOP%29
+
+[ adding borders so that it is printable ]
+convert -border 100x100 main.png main_border.png
