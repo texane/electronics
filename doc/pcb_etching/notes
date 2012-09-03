@@ -1,24 +1,25 @@
 [ toner transfer method ]
+http://www.piclist.com/techref/tonertransfer.htm
 http://www.dr-lex.be/hardware/tonertransfer.html
 http://www.usinages.com/electronique-f4/impresson-pcb-avec-une-plastifieuse-gbc-t22763.html
 http://www.riccibitti.com/pcb/pcb.htm
 
-[ to test ]
-preheat the copper surface for 30 seconds
--> works well
+[ toner transfer ]
 
-oxyened water based etchant solution
+[ iron method ]
+. preheat the copper surface for 30 seconds
+. toner metling temperature is around 170 degrees celsius
+. use an aluminium square to conduct homogeneously the heat
+. apply a lot of pressure, otherwise toner does not transfer
 
-use a 'bain marie' solution: put hot water in a larger recipient and put the etching solution containing one in it
--> ok, works well
+[ laminators ]
+http://www.pcbfx.com/main_site/pages/start_here/laminator_info.html
+http://freedom2000.free.fr/PCB_index.html
 
-put to fridge before removing the paper
 
-use an aluminium square to conduct homogeneously the heat
-
-vibration mechanism
-
-[ to buy ]
-acetone
-tuperoire, to transport the ectching solution then
-gloves
+[ etching ]
+. vibration mechanisms: todo
+. oxyened water based etchant solution
+. use a 'bain marie' solution: put hot water in a larger recipient and put the etching solution containing one in it
+. non perchlo etchants
+.. http://www.instructables.com/id/Stop-using-Ferric-Chloride-etchant!--A-better-etc
